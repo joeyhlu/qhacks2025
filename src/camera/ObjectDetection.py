@@ -24,12 +24,6 @@ class ObjectDetection:
 
         self.model = YOLO("yolov8n.pt")  # Loads a pretrained model        
 
-        # Voice Detect:
-        self.speech = Voice(language='en', speed=False)
-
-        # GPT Client:
-        self.gpt_client = GPTClient()
-
     def callback(self, frame):
         res = self.model(frame)[0]
         detections = Detections.from_ultralytics(res)
@@ -68,9 +62,6 @@ class ObjectDetection:
 
         video.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         video.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-
-        # Web application
-        #st.title("TLDR: A Guide to Intstructions")
 
         frame_placeholder = st.empty()
 
