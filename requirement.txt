@@ -3,7 +3,6 @@ numpy
 opencv-python
 pytest
 pyyaml
-picamera[array]
 scikit-learn
 streamlit
 trimesh
@@ -11,8 +10,6 @@ pyrender
 open3d
 pywavefront
 scipy
-numba
-detectron2
 supervision
 
 # pytorch special case, see requirements-pytorch.txt
