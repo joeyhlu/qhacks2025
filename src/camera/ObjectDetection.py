@@ -4,12 +4,7 @@ import numpy as np
 import time
 from ultralytics import YOLO
 from supervision import Detections, BoxAnnotator, LabelAnnotator, TraceAnnotator, ByteTrack
-from pytesseract import pytesseract
 from PIL import Image
-
-from src.TextDetect import DetectText
-from src.tts import Voice
-from src.GPT import GPTClient
 
 import streamlit as st
 import tempfile
@@ -66,8 +61,6 @@ class ObjectDetection:
         # to check if left mouse button was clicked 
         if event: 
             print("left click") 
-            imgName = f"captures/{self.imgIDX}.png"
-
 
     def __call__(self):
         video = cv2.VideoCapture(self.captureIndex)
