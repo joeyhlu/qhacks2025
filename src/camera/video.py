@@ -94,11 +94,14 @@ def run():
         return
 
     st.info("Starting real-time overlay...")
-    prev_keypoints, prev_descriptors, prev_pose_transform = None, None, None
+    prev_keypoints = None
+    prev_descriptors = None
+    pose_transform = None
+    prev_pose_transform = None
 
     # Streamlit Display Area
-    video_frame = st.empty()
-    augmented_frame_display = st.empty()
+    frame_placeholder = st.empty()
+    #augmented_frame_display = st.empty()
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -118,23 +121,60 @@ def run():
                 prev_pose_transform = pose_transform
             prev_keypoints, prev_descriptors = curr_keypoints, curr_descriptors
         else:
-            # Process person class
-            processed_frame, result = segmenter.body_segmentation(frame)
-            pose_transform = None
-            if result.pose_world_landmarks:
-                arm_mask = create_arm_mask(frame, result, side="right")
-                if np.sum(arm_mask) > 0:
-                    object_mask = arm_mask
-                else:
-                    object_mask = None
+            # Step 2: Use ObjectSegmentation to calculate pose_transform and mask
+            processed_frame, result = segmenter.body_segmentation(frame)  # Unpack correctly
 
-        # Warp and Blend
+            if result.pose_world_landmarks:
+                # Extract current pose 3D landmarks
+                current_pose_3d = np.array([
+                    (lm.x, lm.y, lm.z) for lm in result.pose_world_landmarks.landmark
+                ], dtype=np.float32)
+
+                if segmenter.initial_pose_3d is None:
+                    # Store the initial pose reference for alignment
+                    segmenter.initial_pose_3d = current_pose_3d.copy()
+                    print("[INFO] Stored initial 3D pose reference.")
+                    pose_transform = None
+                else:
+                    # Compute rigid transformation (R, t) from reference to current pose
+                    R, t = segmenter.find_rigid_transform(segmenter.initial_pose_3d, current_pose_3d)
+
+                    # Build the 4x4 transformation matrix
+                    pose_transform = np.eye(4, dtype=np.float32)
+                    pose_transform[:3, :3] = R
+                    pose_transform[:3, 3] = t
+                    print("[DEBUG] Pose Transform Matrix:\n", pose_transform)
+
+                # Create a mask for the right arm (or left)
+                arm_mask = create_arm_mask(frame, result, side="right")  # Specify "right" or "left"
+                if np.sum(arm_mask) == 0:
+                    print("[WARN] Arm mask is empty. Proceeding with next frame.")
+                    #continue
+                else:
+                    object_mask = arm_mask  # Update the mask to use the arm mask
+            else:
+                print("[WARN] No 3D pose landmarks detected. Skipping pose transformation.")
+                pose_transform = None
+                object_mask = None
+
+
+        # Step 3: Warp and blend the design
         if object_mask is not None and np.sum(object_mask) > 0:
-            augmented_frame = warp_and_blend(frame, design_bgra, object_mask, pose_transform)
-            video_frame.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB")
-            augmented_frame_display.image(cv2.cvtColor(augmented_frame, cv2.COLOR_BGR2RGB), channels="RGB")
-        else:
-            st.warning("Skipping frame as mask is empty or invalid.")
+            overlay = cv2.addWeighted(frame, 0.6, cv2.cvtColor(object_mask, cv2.COLOR_GRAY2BGR), 0.4, 0)
+            #cv2.imshow("asd", overlay)
+
+            if pose_transform is None:
+                print("[INFO] Using static placement due to missing pose transform.")
+                augmented_frame = warp_and_blend(frame, design_bgra, object_mask)
+            else:
+                augmented_frame = warp_and_blend(frame, design_bgra, object_mask, pose_transform)
+                print("asdkas?")
+            #cv2.imshow("Augmented Frame", augmented_frame)
+            frame_placeholder.image(augmented_frame)
+
+        else:            
+            #cv2.imshow("Augmented Frame", frame)
+            frame_placeholder.image(frame)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

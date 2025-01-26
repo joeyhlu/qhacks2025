@@ -64,7 +64,8 @@ def run(cls):
 
     segmenter = ObjectSegmentation(plot=False)
 
-    design_bgra = get_design_bgra(device="cuda", is_tattoo=True)
+    iasd = input("whatcha feeling")
+    design_bgra = get_design_bgra(device="cuda", is_tattoo=True, answer=iasd)
     if design_bgra is None:
         print("[ERROR] No design was loaded or generated. Exiting.")
         return
@@ -152,8 +153,8 @@ def run(cls):
                 augmented_frame = warp_and_blend(frame, design_bgra, object_mask, pose_transform)
                 print("asdkas?")
             cv2.imshow("Augmented Frame", augmented_frame)
-        else:
-            print("[WARN] Skipping frame as mask is empty or invalid.")
+        else:            
+            cv2.imshow("Augmented Frame", frame)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
@@ -161,5 +162,5 @@ def run(cls):
     cap.release()
     cv2.destroyAllWindows()
 
-'''if __name__ == "__main__":
-    main('person')'''
+if __name__ == "__main__":
+    run('bottle')
