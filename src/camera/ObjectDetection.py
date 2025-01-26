@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import time
 from ultralytics import YOLO
-from dict import COCO_CLASSES
+from camera.constants import COCO_CLASSES
 
 # Constants
 WIDTH = 1280

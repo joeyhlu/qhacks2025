@@ -9,7 +9,7 @@ from ObjectSegmentation import ObjectSegmentation
 from ObjectDetection import ObjectDetection
 from VisualOdometry import VisualOdometry
 
-from dict import COCO_CLASSES
+from camera.constants import COCO_CLASSES
 
 
 class CombinedTracker:
@@ -121,6 +121,7 @@ class CombinedTracker:
         plt.pause(0.001)
 
     def run(self):
+        # Example run
         cap = cv.VideoCapture(self.capture_index)
         if not cap.isOpened():
             return
