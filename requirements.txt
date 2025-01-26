@@ -1,0 +1,9 @@
+opencv-python
+torch
+diffusers
+transformers
+accelerate
+safetensors
+numpy
+Pillow
+huggingface
