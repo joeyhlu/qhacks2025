@@ -298,9 +298,6 @@ def process_video_bottle(input_video: str, output_video: str, design_bgra_cap: n
     writer.release()
     print(f"[INFO] Output saved => {output_video}")
 
-###############################################################################
-# MAIN
-###############################################################################
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"[INFO] Using device: {device}")
@@ -351,5 +348,5 @@ def main():
             input_video, output_video, design_bgra, erode_px=10
         )
 
-if __name__=="__main__":
-    main()
+
+

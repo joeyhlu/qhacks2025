@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import time
 from ultralytics import YOLO
-from dict import COCO_CLASSES
+from data import COCO_CLASSES
 
 # Constants
 WIDTH = 1280
@@ -65,7 +65,6 @@ class ObjectDetection:
 
                 return (x1, y1, x2, y2), confs[i]
 
-        # Return None if the target class is not found
         return None
 
     def run(self):

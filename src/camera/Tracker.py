@@ -9,8 +9,7 @@ from ObjectSegmentation import ObjectSegmentation
 from ObjectDetection import ObjectDetection
 from VisualOdometry import VisualOdometry
 
-from dict import COCO_CLASSES
-
+from data import COCO_CLASSES
 
 class CombinedTracker:
     def __init__(self, calibration_matrix: np.ndarray, capture_index: int, cls: str, confidence_threshold: float=0.5):
@@ -154,7 +153,7 @@ class CombinedTracker:
                 np.zeros_like(background_mask),
                 np.zeros_like(background_mask)
             ])
-            #display_frame = cv.addWeighted(display_frame, 1.0, disp_bg, 0.4, 0)
+            display_frame = cv.addWeighted(display_frame, 1.0, disp_bg, 0.4, 0)
 
             # Mark all objects (person + non-person) in green
             disp_obj = cv.merge([
@@ -163,7 +162,7 @@ class CombinedTracker:
                 np.zeros_like(combined_mask)
             ])
 
-            #display_frame = cv.addWeighted(display_frame, 1.0, disp_obj, 0.4, 0)
+            display_frame = cv.addWeighted(display_frame, 1.0, disp_obj, 0.4, 0)
 
             # Draw ORB keypoints
             #cv.drawKeypoints(display_frame, bg_kp, display_frame, color=(255, 0, 0))
