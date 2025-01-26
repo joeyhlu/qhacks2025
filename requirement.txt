@@ -12,5 +12,13 @@ open3d
 pywavefront
 scipy
 mediapipe
-
+opencv-python
+torch
+diffusers
+transformers
+accelerate
+safetensors
+numpy
+Pillow
+huggingface
 # pytorch special case, see requirements-pytorch.txt
