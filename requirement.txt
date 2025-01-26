@@ -1,5 +1,6 @@
 # Packages listed in alphabetical order
 numpy
+bokeh
 opencv-python
 pytest
 pyyaml
@@ -10,6 +11,6 @@ pyrender
 open3d
 pywavefront
 scipy
-supervision
+mediapipe
 
 # pytorch special case, see requirements-pytorch.txt
