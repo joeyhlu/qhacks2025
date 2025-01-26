@@ -57,7 +57,7 @@ class CombinedTracker:
         labels = outputs["labels"].cpu().numpy()
         allmasks = outputs["masks"].cpu().numpy()
 
-        target_class_id = COCO_CLASSES.index(self.coco_class)-1
+        target_class_id = COCO_CLASSES.index(self.coco_class)
 
         h, w = frame.shape[:2]
         person_mask = np.zeros((h, w), dtype=np.uint8)
@@ -77,19 +77,22 @@ class CombinedTracker:
             score_i = scores[i]
             label_i = labels[i]
 
+            print(label_i==1)
+
             if score_i < self.conf_threshold:
                 continue
-
+            
             # Binarize the mask
             mask_i = (allmasks[i, 0] > 0.5).astype(np.uint8) * 255
 
-            # Limit the mask to the bounding box region
-            mask_i_cropped = np.zeros_like(mask_i)
-            mask_i_cropped[y1:y2, x1:x2] = mask_i[y1:y2, x1:x2]
+            if label_i!=0:
+                # Limit the mask to the bounding box region
+                mask_i_cropped = np.zeros_like(mask_i)
+                mask_i_cropped[y1:y2, x1:x2] = mask_i[y1:y2, x1:x2]
 
             # Merge into person_mask or nonperson_mask
             if label_i == 1:
-                person_mask = cv.bitwise_or(person_mask, mask_i_cropped)
+                person_mask = cv.bitwise_or(person_mask, mask_i)
             else:
                 nonperson_mask = cv.bitwise_or(nonperson_mask, mask_i_cropped)
 
@@ -151,7 +154,7 @@ class CombinedTracker:
                 np.zeros_like(background_mask),
                 np.zeros_like(background_mask)
             ])
-            #display_frame = cv.addWeighted(display_frame, 1.0, disp_bg, 0.4, 0)
+            display_frame = cv.addWeighted(display_frame, 1.0, disp_bg, 0.4, 0)
 
             # Mark all objects (person + non-person) in green
             disp_obj = cv.merge([
