@@ -68,15 +68,14 @@ class CombinedTracker:
         if detection is None:
             # Return empty masks if the bounding box is not found
             return person_mask, nonperson_mask
-
+        print("truee")
         (x1, y1, x2, y2), _ = detection
+        cv.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
         # Iterate over each detection and apply masks only within the bounding box
         for i in range(len(scores)):
             score_i = scores[i]
             label_i = labels[i]
-
-            print(label_i==1)
 
             if score_i < self.conf_threshold:
                 continue
@@ -189,5 +188,5 @@ if __name__ == "__main__":
     [0, 0, 1]
 ])
 
-    tracker = CombinedTracker(calibration_matrix=K, capture_index=1, cls="bottle")
+    tracker = CombinedTracker(calibration_matrix=K, capture_index=0, cls="bottle")
     tracker.run()

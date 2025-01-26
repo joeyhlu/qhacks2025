@@ -136,52 +136,69 @@ def order_corners(pts):
     rect[3] = pts[np.argmax(diff)]  
     return rect
 
-def warp_and_blend(frame_bgr, design_bgra, mask_region):
+def warp_and_blend(frame_bgr, design_bgra, mask_region, pose_transform=None):
+    """
+    Warps and blends the design only within the mask region.
+
+    Args:
+        frame_bgr (np.ndarray): The original frame in BGR format.
+        design_bgra (np.ndarray): The design image in BGRA format.
+        mask_region (np.ndarray): Binary mask defining the region to overlay the design.
+        pose_transform (np.ndarray): Homography matrix to apply perspective transformation (optional).
+
+    Returns:
+        np.ndarray: The frame with the design blended within the mask region.
+    """
     out = frame_bgr.copy()
 
-    cts, _ = cv2.findContours(mask_region, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not cts:
+    # Validate mask
+    if np.sum(mask_region) == 0:
+        print("[WARN] Mask is empty. Skipping frame.")
         return out
-    largest_ct = max(cts, key=cv2.contourArea)
 
+    # Find contours
+    contours, _ = cv2.findContours(mask_region, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        print("[WARN] No contours found. Skipping frame.")
+        return out
+
+    largest_ct = max(contours, key=cv2.contourArea)
     peri = cv2.arcLength(largest_ct, True)
-    approx = cv2.approxPolyDP(largest_ct, 0.0000000000001*peri, True)
+    approx = cv2.approxPolyDP(largest_ct, 0.02 * peri, True)
 
-    if len(approx) == 4:
-        approx = approx.reshape(-1,2).astype(np.float32)
-        approx = order_corners(approx)
-
-        h_des, w_des = design_bgra.shape[:2]
-        src_corners = np.array([[0,0],[w_des,0],[w_des,h_des],[0,h_des]], dtype=np.float32)
-        M = cv2.getPerspectiveTransform(src_corners, approx)
-        warped = cv2.warpPerspective(design_bgra, M, (out.shape[1], out.shape[0]))
-
-        alpha_design = warped[...,3].astype(float)/255.0
-        design_rgb   = warped[...,:3]
-        mask_f = mask_region.astype(float)/255.0
-
-        for c in range(3):
-            out[..., c] = design_rgb[..., c]*alpha_design*mask_f + out[..., c]*(1-alpha_design*mask_f)
+    # Ensure exactly 4 points for perspective transform
+    if len(approx) != 4:
+        print(f"[WARN] Invalid corner points: {len(approx)}. Approximating to rectangle.")
+        x, y, w, h = cv2.boundingRect(largest_ct)
+        approx = np.array([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], dtype=np.float32)
     else:
-        x,y,w,h = cv2.boundingRect(largest_ct)
-        if w<=0 or h<=0:
+        approx = approx.reshape(-1, 2).astype(np.float32)
+
+    print("[DEBUG] Contour Points (approx):", approx)
+
+    # Design dimensions
+    h_des, w_des = design_bgra.shape[:2]
+    src_corners = np.array([[0, 0], [w_des, 0], [w_des, h_des], [0, h_des]], dtype=np.float32)
+
+    # Apply pose transform if provided
+    if pose_transform is not None:
+        try:
+            approx = cv2.perspectiveTransform(approx[np.newaxis, :, :], pose_transform).squeeze()
+        except cv2.error as e:
+            print("[ERROR] Perspective transform failed:", e)
             return out
 
-        design_resized = cv2.resize(design_bgra, (w,h), interpolation=cv2.INTER_AREA)
-        if design_resized.shape[2]==4:
-            alpha_design = design_resized[...,3].astype(float)/255.0
-            design_rgb   = design_resized[...,:3]
-        else:
-            alpha_design = np.ones((h,w),dtype=np.float32)
-            design_rgb   = design_resized
+    # Compute homography for warping
+    M = cv2.getPerspectiveTransform(src_corners, approx)
+    warped = cv2.warpPerspective(design_bgra, M, (frame_bgr.shape[1], frame_bgr.shape[0]))
 
-        roi= out[y:y+h, x:x+w]
-        mask_f= (mask_region[y:y+h, x:x+w].astype(float))/255.0
-        final_alpha= alpha_design*mask_f
-        for c in range(3):
-            roi[..., c] = design_rgb[..., c]*final_alpha + roi[..., c]*(1-final_alpha)
+    # Blend the warped design only within the mask
+    mask_f = mask_region.astype(float) / 255.0  # Normalize mask to [0, 1]
+    alpha = (warped[..., 3] / 255.0) * mask_f  # Combine mask and design alpha
+    design_rgb = warped[..., :3]
 
-        out[y:y+h, x:x+w] = roi
+    for c in range(3):  # Blend each channel
+        out[..., c] = design_rgb[..., c] * alpha + out[..., c] * (1 - alpha)
 
     return out
 
@@ -297,6 +314,38 @@ def process_video_bottle(input_video: str, output_video: str, design_bgra_cap: n
     cap.release()
     writer.release()
     print(f"[INFO] Output saved => {output_video}")
+
+def compute_pose_transform(prev_keypoints, curr_keypoints, prev_descriptors, curr_descriptors):
+    # Check if descriptors are valid
+    if prev_descriptors is None or curr_descriptors is None:
+        print("[INFO] Descriptors are None. Skipping pose computation.")
+        return None
+
+    if prev_descriptors.dtype != np.uint8 or curr_descriptors.dtype != np.uint8:
+        raise ValueError("Descriptors must be of type np.uint8 for ORB.")
+
+    if prev_descriptors.shape[1] != curr_descriptors.shape[1]:
+        raise ValueError("Descriptor dimensions do not match.")
+
+    # Match features using a brute-force matcher
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(prev_descriptors, curr_descriptors)
+
+    # Sort matches by distance (best matches first)
+    matches = sorted(matches, key=lambda x: x.distance)
+
+    if len(matches) < 4:  # Minimum number of points needed to compute homography
+        print("[INFO] Not enough matches to compute pose transform.")
+        return None
+
+    # Extract matching points
+    src_pts = np.float32([prev_keypoints[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
+    dst_pts = np.float32([curr_keypoints[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
+
+    # Compute homography using RANSAC
+    M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+    return M
+
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
