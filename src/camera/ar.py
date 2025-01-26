@@ -6,6 +6,9 @@ from GenerateAndMap import get_design_bgra, warp_and_blend, compute_pose_transfo
 from ObjectSegmentation import ObjectSegmentation
 from data import landmark_names
 
+import streamlit as st
+
+
 def smooth_pose_transform(prev_transform, curr_transform, alpha=0.9):
     if prev_transform is None or curr_transform is None:
         return curr_transform

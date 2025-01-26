@@ -3,14 +3,14 @@ import streamlit as st
 def main():
     # Page set up
     home_page = st.Page(
-        page="camera/pages/home.py", 
+        page="src/camera/home.py", 
         title="Home", 
         icon="🏠",
         default=True,
     )
 
     video_page = st.Page(
-        page="camera/pages/video.py", 
+        page="src/camera/video.py", 
         title="Application", 
         icon="📷"
     )

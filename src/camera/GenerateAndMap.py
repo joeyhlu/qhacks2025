@@ -84,15 +84,15 @@ def lower_tattoo_opacity(bgra: np.ndarray, alpha_value=128) -> np.ndarray:
     out[mask_non_transparent, 3] = alpha_value
     return out
 
-def get_design_bgra(device: str, is_tattoo=False) -> np.ndarray:
-    method = input("Generate with a prompt (p) or load design from link (l)? [p/l]: ").strip().lower()
-    if method == 'l':
+def get_design_bgra(device: str, answer: str, is_tattoo=False) -> np.ndarray:
+    method = answer
+    if method == None:
         url_or_path = input("Enter link or local path to your design: ").strip()
         design_bgra = download_image_bgra(url_or_path)
         if design_bgra is None:
             return None
     else:
-        prompt = input("Enter your design prompt: ").strip()
+        prompt = answer.strip()
         neg_prompt = "blurry, anything unrelated to the prompt, people, texture"
         if is_tattoo:
             prompt += ", black and white ink style"
@@ -107,7 +107,7 @@ def get_design_bgra(device: str, is_tattoo=False) -> np.ndarray:
         return None
 
     if is_tattoo:
-        choice_bg = input("Remove near-white background? [y/n]: ").strip().lower()
+        choice_bg = "y"
         if choice_bg == 'y':
             design_bgra = remove_background_white_from_bgra(design_bgra, threshold=240)
 
