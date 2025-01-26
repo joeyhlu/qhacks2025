@@ -1,6 +1,6 @@
 import cv2 as cv
 import numpy as np
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans  # Imported but unused; safe to remove if needed
 import matplotlib.pyplot as plt
 
 class VisualOdometry:
@@ -26,8 +26,8 @@ class VisualOdometry:
         self.x_coords = [0]
         self.z_coords = [0]
 
-        # Increase threshold to reduce random motion
-        self.min_translation_threshold = 0.02  # Adjust as needed
+        # Lower threshold if your motion is small
+        self.min_translation_threshold = 0.001
 
     def detect_and_compute(self, gray_frame, mask=None):
         keypoints, descriptors = self.orb.detectAndCompute(gray_frame, mask)
@@ -53,18 +53,27 @@ class VisualOdometry:
         return pts1, pts2
 
     def compute_pose(self, pts1, pts2):
+        # Not enough points => skip
         if pts1 is None or pts2 is None or len(pts1) < 8:
             return None, None
+
+        # Lower threshold to reject outliers more aggressively
         E, mask = cv.findEssentialMat(
-            pts1, pts2, self.K, method=cv.RANSAC, prob=0.999, threshold=1.0
+            pts1, pts2, self.K,
+            method=cv.RANSAC,
+            prob=0.999,
+            threshold=0.5  # lowered from 1.0
         )
         if E is None:
             return None, None
+
         retval, R, t, mask_pose = cv.recoverPose(E, pts1, pts2, self.K, mask=mask)
-        if retval < 8:
+
+        # Raise the inlier count requirement if your scene has more features
+        if retval < 8:  # You can raise to 30 or 50 for more robust checking
             return None, None
 
-        # Skip if translation too small
+        # Check if translation is large enough
         t_norm = np.linalg.norm(t)
         if t_norm < self.min_translation_threshold:
             return None, None
@@ -77,7 +86,11 @@ class VisualOdometry:
         T = np.eye(4)
         T[:3, :3] = R
         T[:3, 3] = t.squeeze()
+
+        # We keep the same logic: appending the new pose as old_pose @ inv(T)
+        # because recoverPose returns camera1->camera2, and we track camera->world
         self.poses.append(self.poses[-1] @ np.linalg.inv(T))
+
         self.x_coords.append(self.poses[-1][0, 3])
         self.z_coords.append(self.poses[-1][2, 3])
 
@@ -95,4 +108,6 @@ class VisualOdometry:
         self.prev_gray = gray
         self.prev_kp = kp
         self.prev_des = des
+
+        # Return keypoints for visualization if needed
         return kp

@@ -154,7 +154,7 @@ class CombinedTracker:
                 np.zeros_like(background_mask),
                 np.zeros_like(background_mask)
             ])
-            display_frame = cv.addWeighted(display_frame, 1.0, disp_bg, 0.4, 0)
+            #display_frame = cv.addWeighted(display_frame, 1.0, disp_bg, 0.4, 0)
 
             # Mark all objects (person + non-person) in green
             disp_obj = cv.merge([
@@ -163,11 +163,11 @@ class CombinedTracker:
                 np.zeros_like(combined_mask)
             ])
 
-            display_frame = cv.addWeighted(display_frame, 1.0, disp_obj, 0.4, 0)
+            #display_frame = cv.addWeighted(display_frame, 1.0, disp_obj, 0.4, 0)
 
             # Draw ORB keypoints
-            cv.drawKeypoints(display_frame, bg_kp, display_frame, color=(255, 0, 0))
-            cv.drawKeypoints(display_frame, obj_kp, display_frame, color=(0, 255, 0))
+            #cv.drawKeypoints(display_frame, bg_kp, display_frame, color=(255, 0, 0))
+            #cv.drawKeypoints(display_frame, obj_kp, display_frame, color=(0, 255, 0))
 
             # seg thingy here
             if np.count_nonzero(person_mask) > 0:
