@@ -31,7 +31,7 @@ def main():
     tracker = CombinedTracker(
         calibration_matrix=calibration_matrix,
         capture_index=0,  # Webcam index or video file path
-        cls='person',  # Target class in COCO_CLASSES
+        cls='bottle',  # Target class in COCO_CLASSES
         confidence_threshold=0.5
     )
 
@@ -42,7 +42,7 @@ def main():
         return
     print("[DEBUG] Design BGRA Shape:", design_bgra.shape)
     print("[DEBUG] Design Alpha Channel Unique Values:", np.unique(design_bgra[..., 3]))
-    cv2.imshow("Design BGRA", design_bgra[..., :3])  # Display the design
+    #cv2.imshow("Design BGRA", design_bgra[..., :3])  # Display the design
 
     # ===== Capture frames and overlay design =====
     cap = cv2.VideoCapture(tracker.capture_index)  # Use the tracker for input
@@ -67,7 +67,7 @@ def main():
 
         # Display the mask overlay
         overlay = cv2.addWeighted(frame, 0.6, cv2.cvtColor(object_mask, cv2.COLOR_GRAY2BGR), 0.4, 0)
-        cv2.imshow("Mask Overlay", overlay)
+        #cv2.imshow("Mask Overlay", overlay)
 
         print("[DEBUG] Object Mask Unique Values:", np.unique(object_mask))  # Debugging mask
         if np.sum(object_mask) == 0:
@@ -100,7 +100,7 @@ def main():
             augmented_frame = warp_and_blend(frame, design_bgra, object_mask, pose_transform)
 
         # Debugging warped design and final frame
-        cv2.imshow("Warped Design", design_bgra[..., :3])  # Display the warped design
+        #cv2.imshow("Warped Design", design_bgra[..., :3])  # Display the warped design
         cv2.imshow("Augmented Frame", augmented_frame)  # Display the augmented frame
 
         # Display result
