@@ -1,155 +1,118 @@
-import cv2 as cv
+import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 
-from ObjectSegmentation import ObjectSegmentation
-from ObjectDetection import ObjectDetection
-from VisualOdometry import VisualOdometry
+# =====================================================
+# 1. Load reference images (object & overlay design)
+# =====================================================
+object_img = cv2.imread("./src/board.png", cv2.IMREAD_GRAYSCALE)
+design_img = cv2.imread("./src/cute.png")
 
-from dict import COCO_CLASSES
+if object_img is None:
+    raise IOError("Could not load object_reference.jpg")
+if design_img is None:
+    raise IOError("Could not load my_logo.png")
 
-class CombinedTracker:
-    def __init__(self, calibration_matrix: np.ndarray, capture_index: int, cls: str, confidence_threshold: float = 0.5):
-        """
-        Use YOLO to generate bounding boxes and masks.
-        Skip object VO if label=1 (person).
-        """
-        self.conf_threshold = confidence_threshold
-        self.coco_class = cls
-        self.capture_index = capture_index
+# For better matching, we might keep the object reference in grayscale
+# The design (logo) can remain in color
 
-        # Imported code (ObjectSegmentation) for drawing MediaPipe poses
-        self.seg = ObjectSegmentation(False)
-        self.detect = ObjectDetection(capture_index=self.capture_index)
+# =====================================================
+# 2. Initialize the ORB feature detector
+# =====================================================
+orb = cv2.ORB_create()
 
-        # Two VO instances: background, object
-        self.vo_background = VisualOdometry(calibration_matrix, label="BackgroundVO")
-        self.vo_object = VisualOdometry(calibration_matrix, label="ObjectVO")
+# Compute keypoints and descriptors for the reference object
+kp_object, des_object = orb.detectAndCompute(object_img, None)
 
-        # Matplotlib figure for x-z plane
-        self.fig, self.ax = plt.subplots()
-        self.line_bg, = self.ax.plot([], [], 'b-', label="Camera Trajectory (BG)")
-        self.line_obj, = self.ax.plot([], [], 'g-', label="Object Trajectory")
+# =====================================================
+# 3. Create a function to detect the object and get homography
+# =====================================================
+def detect_object_and_compute_homography(frame):
+    """
+    Detects the planar object in the given frame using ORB keypoints 
+    and computes a homography matrix if enough matches are found.
+    Returns H (3x3 homography) or None if not found.
+    """
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    def get_masks_fullframe(self, frame):
-        """
-        Returns:
-        person_mask: All pixels that belong to any detection with label=1 within the bounding box.
-        nonperson_mask: All pixels that belong to non-person detections within the bounding box.
-        """
-        h, w = frame.shape[:2]
-        person_mask = np.zeros((h, w), dtype=np.uint8)
-        nonperson_mask = np.zeros((h, w), dtype=np.uint8)
+    # Detect keypoints and descriptors in the live frame
+    kp_frame, des_frame = orb.detectAndCompute(gray_frame, None)
+    if des_frame is None or len(kp_frame) < 2:
+        return None
 
-        # Get YOLO bounding box for the target class
-        detection = self.detect.find_bounding_box(frame, self.coco_class)
+    # Use a BFMatcher to match descriptors
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(des_object, des_frame)
 
-        if detection is None:
-            # Return empty masks if no bounding box is found
-            return person_mask, nonperson_mask
+    # Sort matches by distance
+    matches = sorted(matches, key=lambda x: x.distance)
 
-        (x1, y1, x2, y2), _ = detection
+    # Filter "good" matches (tweak the number as needed)
+    good_matches = matches[:50]  # top 50 matches, for example
 
-        # Create a mask within the bounding box
-        mask = np.zeros((h, w), dtype=np.uint8)
-        mask[y1:y2, x1:x2] = 255
+    # We need at least 4 matches to compute a homography
+    if len(good_matches) < 4:
+        return None
 
-        if self.coco_class == "person":
-            person_mask = mask
-        else:
-            nonperson_mask = mask
+    # Extract the matched keypoints’ locations
+    src_pts = np.float32([kp_object[m.queryIdx].pt for m in good_matches]).reshape(-1,1,2)
+    dst_pts = np.float32([kp_frame[m.trainIdx].pt for m in good_matches]).reshape(-1,1,2)
 
-        return person_mask, nonperson_mask
+    # Compute homography using RANSAC
+    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+    return H
 
-    def update_2d_plot(self):
-        bg_x = self.vo_background.x_coords
-        bg_z = self.vo_background.z_coords
-        self.line_bg.set_data(bg_x, bg_z)
+# =====================================================
+# 4. Start capturing video from the default camera
+# =====================================================
+cap = cv2.VideoCapture(0)  # Change index if you have multiple cameras
 
-        obj_x = self.vo_object.x_coords
-        obj_z = self.vo_object.z_coords
-        self.line_obj.set_data(obj_x, obj_z)
+# =====================================================
+# 5. Main loop
+# =====================================================
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("Failed to grab frame from camera.")
+        break
 
-        all_x = np.concatenate([bg_x, obj_x])
-        all_z = np.concatenate([bg_z, obj_z])
+    # Compute homography
+    H = detect_object_and_compute_homography(frame)
 
-        if len(all_x) > 0:
-            pad = 1.0
-            self.ax.set_xlim(np.min(all_x) - pad, np.max(all_x) + pad)
-            self.ax.set_ylim(np.min(all_z) - pad, np.max(all_z) + pad)
+    if H is not None:
+        # If we have a valid homography, warp the design image 
+        # to the perspective of the object in the current frame.
 
-        self.fig.canvas.draw()
-        self.fig.canvas.flush_events()
-        plt.pause(0.001)
+        # Get dimensions of the camera frame
+        h_frame, w_frame, _ = frame.shape
 
-    def run(self):
-        cap = cv.VideoCapture(self.capture_index)
-        if not cap.isOpened():
-            return
+        # Warp the design to match the perspective of the object
+        warped_design = cv2.warpPerspective(design_img, H, (w_frame, h_frame))
 
-        self.ax.set_title("X-Z Trajectories")
-        self.ax.set_xlabel("X")
-        self.ax.set_ylabel("Z")
-        self.ax.legend()
-        plt.ion()
+        # Create a mask from the warped design where pixels are non-zero
+        warped_gray = cv2.cvtColor(warped_design, cv2.COLOR_BGR2GRAY)
+        _, mask = cv2.threshold(warped_gray, 1, 255, cv2.THRESH_BINARY)
+        mask_inv = cv2.bitwise_not(mask)
 
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+        # Convert single-channel masks to 3-channel
+        mask_3c = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        mask_inv_3c = cv2.cvtColor(mask_inv, cv2.COLOR_GRAY2BGR)
 
-            # Get person_mask & nonperson_mask from YOLO
-            person_mask, nonperson_mask = self.get_masks_fullframe(frame)
+        # Black-out the region in the original frame where the design will go
+        frame_bg = cv2.bitwise_and(frame, mask_inv_3c)
 
-            combined_mask = cv.bitwise_or(person_mask, nonperson_mask)
-            background_mask = cv.bitwise_not(combined_mask)
+        # Place the warped design on top
+        final_frame = cv2.add(frame_bg, warped_design)
 
-            bg_kp = self.vo_background.process_frame(frame, mask=background_mask)
-            obj_kp = self.vo_object.process_frame(frame, mask=nonperson_mask)
+        # Show the augmented frame
+        cv2.imshow("AR Overlay", final_frame)
+    else:
+        # If no homography was found, just show the original frame
+        cv2.imshow("AR Overlay", frame)
 
-            self.update_2d_plot()
-            display_frame = frame.copy()
+    # Press 'q' to exit
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
 
-            # Mark background as red
-            disp_bg = cv.merge([
-                background_mask,
-                np.zeros_like(background_mask),
-                np.zeros_like(background_mask)
-            ])
-
-            # Mark all objects (person + non-person) in green
-            disp_obj = cv.merge([
-                np.zeros_like(combined_mask),
-                combined_mask,
-                np.zeros_like(combined_mask)
-            ])
-
-            display_frame = cv.addWeighted(display_frame, 1.0, disp_obj, 0.4, 0)
-
-            # Draw ORB keypoints
-            cv.drawKeypoints(display_frame, bg_kp, display_frame, color=(255, 0, 0))
-            cv.drawKeypoints(display_frame, obj_kp, display_frame, color=(0, 255, 0))
-
-            # Segment person pose if a person is detected
-            if np.count_nonzero(person_mask) > 0:
-                display_frame, _ = self.seg.body_segmentation(display_frame)
-
-            cv.imshow("Combined Tracker + Person Pose", display_frame)
-            if cv.waitKey(1) & 0xFF == ord('q'):
-                break
-
-        cap.release()
-        cv.destroyAllWindows()
-        plt.ioff()
-        plt.show()
-
-
-if __name__ == "__main__":
-    K = np.array([
-        [815.1466689653845, 0, 638.4755231076894],
-        [0, 814.8708730117189, 361.6966488002967],
-        [0, 0, 1]
-    ])
-
-    tracker = CombinedTracker(calibration_matrix=K, capture_index=1, cls="person")
-    tracker.run()
+# Cleanup
+cap.release()
+cv2.destroyAllWindows()
