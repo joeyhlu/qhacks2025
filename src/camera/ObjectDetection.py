@@ -1,110 +1,121 @@
-import os
 import cv2
 import numpy as np
 import time
 from ultralytics import YOLO
-from supervision import Detections, BoxAnnotator, LabelAnnotator, TraceAnnotator, ByteTrack
-from PIL import Image
+from dict import COCO_CLASSES
 
-import streamlit as st
-import tempfile
+# Constants
+WIDTH = 1280
+HEIGHT = 720
+AREA_THRESH = 30
+CONFIDENCE = 0.5
 
 class ObjectDetection:
-    def __init__(self, captureIndex, width, height, track):
-        self.width, self.height = width, height
-        self.captureIndex = captureIndex
-        self.boxAnnotator = BoxAnnotator()
-        self.labelAnnotator = LabelAnnotator()
-        self.traceAnnotator = TraceAnnotator()
-        self.tracker = ByteTrack()
-        self.detections = None
-        self.track = track
+    def __init__(self, capture_index=0, model_path="yolov8n-seg.pt"):
+        self.width, self.height = WIDTH, HEIGHT
+        self.capture_idx = capture_index
+        self.model = YOLO(model_path)
 
-        self.area = self.width * self.height
+    def get_all_detections(self, frame):
+        resized_frame = cv2.resize(frame, (640, 640))
+        results = self.model(resized_frame)
 
-        self.model = YOLO("yolov8n.pt")  # Loads a pretrained model        
+        res = results[0]
+        boxes_xyxy = res.boxes.xyxy.cpu().numpy()  # shape [N,4]
+        confs = res.boxes.conf.cpu().numpy()       # shape [N]
+        classes = res.boxes.cls.cpu().numpy()      # shape [N]
 
-    def callback(self, frame):
-        res = self.model(frame)[0]
-        detections = Detections.from_ultralytics(res)
-        detections = self.tracker.update_with_detections(detections)
-        detections = detections[(detections.area / self.area) < 0.3]
+        masks = res.masks.data.cpu().numpy() if res.masks is not None else None
 
-        # Object labeling
-        labels = [
-            f"#{trackerID} {res.names[classID]}"
-            for classID, trackerID in zip(detections.class_id, detections.tracker_id)
-        ]
+        for i in list(classes):
+            print(f"{i} and {COCO_CLASSES[int(i)]}")
 
-        # Annotates the image
-        annotatedImage = self.boxAnnotator.annotate(
-            scene=frame.copy(), detections=detections
-        )
-        
-        # Labels the image
-        annotatedImage = self.labelAnnotator.annotate(
-            scene=annotatedImage, detections=detections, labels=labels
-        )
+        H, W = frame.shape[:2]
+        boxes_scaled = []
+        for box in boxes_xyxy:
+            x1, y1, x2, y2 = box
+            x1 = int(x1 * W / 640)
+            y1 = int(y1 * H / 640)
+            x2 = int(x2 * W / 640)
+            y2 = int(y2 * H / 640)
+            boxes_scaled.append([x1, y1, x2, y2])
+        boxes_scaled = np.array(boxes_scaled, dtype=np.int32)
 
-        # Returns the image with path traveled traced out
-        if self.track: 
-            return self.traceAnnotator.annotate(annotatedImage, detections=detections)
-        return annotatedImage
+        return boxes_scaled, confs, classes, masks
     
-    def click(self, event, param): 
-        # to check if left mouse button was clicked 
-        if event: 
-            print("left click") 
+    def find_bounding_box(self, frame, target_cls):
+        resized_frame = cv2.resize(frame, (640, 640))
+        results = self.model(resized_frame)
 
-    def __call__(self):
-        video = cv2.VideoCapture(self.captureIndex)
-        assert video.isOpened()
+        res = results[0]
+        boxes_xyxy = res.boxes.xyxy.cpu().numpy()  # shape [N, 4]
+        confs = res.boxes.conf.cpu().numpy()       # shape [N]
+        classes = res.boxes.cls.cpu().numpy()      # shape [N]
 
+        H, W = frame.shape[:2]
+
+        for i, cls in enumerate(classes):
+            if int(cls) == target_cls:
+                # Scale the bounding box to the original frame size
+                x1, y1, x2, y2 = boxes_xyxy[i]
+                x1 = int(x1 * W / 640)
+                y1 = int(y1 * H / 640)
+                x2 = int(x2 * W / 640)
+                y2 = int(y2 * H / 640)
+
+                return (x1, y1, x2, y2), confs[i]
+
+        # Return None if the target class is not found
+        return None
+
+    def run(self):
+        video = cv2.VideoCapture(self.capture_idx)
+        if not video.isOpened():
+            print("Camera not found or can't be opened.")
+            return
         video.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         video.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
 
-        frame_placeholder = st.empty()
+        while True:
+            ret, frame = video.read()
+            if not ret:
+                break
+            ti = time.time()
+            boxes, confs, classes, masks = self.get_all_detections(frame)
+            
+            fps = 1 / (time.time() - ti)
 
-        capture_button, ask_button, stop_button_pressed = st.columns([1,1,1])
+            for (x1, y1, x2, y2), conf, cls in zip(boxes, confs, classes):
+                if conf < CONFIDENCE: 
+                    continue
+                cls_name = COCO_CLASSES[int(cls)] if int(cls) < len(COCO_CLASSES) else f"Class {int(cls)}"
+                label = f"{cls_name} {conf:.2f}"
 
-        with capture_button: 
-            b1=st.button("Capture")
-        with ask_button: 
-            b2=st.button("Ask")
-        with stop_button_pressed: 
-            b3=st.button("Stop")
+                # Draw bounding box
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-        while True: 
-            ti = time.time()  # Starting time
-
-            ret, frame = video.read()  # Captures frame by frame 
-            if not ret: 
-                break  # breaks if read incorrectly
-
-            image, tf = self.callback(frame), time.time()
-            fps = 1 / np.round(tf - ti, 2)
-
-            # FPS text on screen
+                # Add label text
+                cv2.putText(
+                    frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1, cv2.LINE_AA
+                )
+            
             cv2.putText(
-                img=image, text=f'FPS: {int(fps)}', org=(20, 70), fontFace=5, fontScale=1.5, color=(227, 111, 179), thickness=2
+                img=frame,
+                text=f'FPS: {int(fps)}',
+                org=(20, 70),
+                fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                fontScale=1.5,
+                color=(227, 111, 179),
+                thickness=2
             )
 
-            print((capture_button, ask_button))
-            if b1:
-                print("ok")
-
-                self.click(True, image)
-            elif b2:
-                self.click(True, image)
-
-
-            if cv2.waitKey(1) & 0xFF == ord(" ") or b3: 
+            cv2.imshow("Detection with Labels", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-        # Release the capture
         video.release()
         cv2.destroyAllWindows()
 
-# Create an instance of ObjectDetection
-#detector = ObjectDetection(0, 1280, 720, True)
-#detector()
+if __name__ == "__main__":
+    detector = ObjectDetection(0)
+    detector.run()
