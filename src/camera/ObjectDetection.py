@@ -8,7 +8,7 @@ from data import COCO_CLASSES
 WIDTH = 1280
 HEIGHT = 720
 AREA_THRESH = 30
-CONFIDENCE = 0.5
+CONFIDENCE = 0.15
 
 class ObjectDetection:
     def __init__(self, capture_index=0, model_path="yolov8n-seg.pt"):

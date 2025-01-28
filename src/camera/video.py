@@ -6,8 +6,9 @@ from Tracker import CombinedTracker
 from GenerateAndMap import get_design_bgra, warp_and_blend, compute_pose_transform
 from ObjectSegmentation import ObjectSegmentation
 
+from data import COCO_CLASSES
 # Streamlit App Title
-st.title("Real-Time Object Design Overlay")
+st.title("Visualize It")
 
 # Streamlit Sidebar Inputs
 st.sidebar.header("Configuration")
@@ -19,16 +20,39 @@ calibration_matrix = np.array([
 
 capture_index = st.sidebar.number_input("Camera Index", value=0, min_value=0, step=1)
 confidence_threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.5)
-object_class = st.sidebar.selectbox("Object Class", ["person", "bottle"], index=0)
+object_class = st.sidebar.selectbox("Object Class", COCO_CLASSES, index=0)
 device = st.sidebar.selectbox("Device", ["cuda", "cpu"], index=0)
+
+
+# Answering 
+ans_method = "upload"
+upload_mode = st.sidebar.checkbox("Upload an Image")
+prompt = None
+
+uploaded_image = None
+if upload_mode:
+    uploaded_image = st.file_uploader("Choose an Image", type=["jpg"])
+    if uploaded_image is not None:  # Check if a file has been uploaded
+        # Convert the uploaded file to a numpy array
+        image = cv2.imdecode(np.frombuffer(uploaded_image.read(), np.uint8), cv2.IMREAD_COLOR)
+
+        # Save the image to disk
+        save_path = "logo.jpg"
+        cv2.imwrite(save_path, image)
+
+        # Provide feedback to the user
+        st.success(f"Image saved as {save_path}")
+        prompt = str(save_path)
+    else:
+        st.warning("Please upload an image file.")
 
 # Ask whether to generate a prompt
 generate_prompt = st.sidebar.checkbox("Generate a Prompt?", value=False)
-prompt = None
 if generate_prompt:
+    ans_method = 'generate'
     prompt = st.sidebar.text_input("Enter your prompt", value="Default Prompt")
 
-is_tattoo = st.sidebar.checkbox("Use Tattoo Design", value=True)
+is_tattoo = st.sidebar.checkbox("Use No Background Design", value=True)
 
 # Helper Function for Pose Smoothing
 def smooth_pose_transform(prev_transform, curr_transform, alpha=0.9):
@@ -81,7 +105,7 @@ def run():
 
     segmenter = ObjectSegmentation(plot=False)
 
-    design_bgra = get_design_bgra(device=device, is_tattoo=is_tattoo, answer=prompt if generate_prompt else None)
+    design_bgra = get_design_bgra(device=device, is_tattoo=is_tattoo, answer_method=ans_method, answer=prompt)
     if design_bgra is None:
         st.error("No design was loaded or generated. Exiting.")
         return
