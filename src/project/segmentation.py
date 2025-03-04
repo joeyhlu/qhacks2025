@@ -74,17 +74,25 @@ class SegmentationModel:
 # Initialize the segmentation model
 segmentation_model = None
 
-def get_segmentation_model():
+def get_segmentation_model(target_class='person'):
+    """
+    Get or create a segmentation model for the specified target class
+    Args:
+        target_class (str): Class name to segment (e.g., 'person', 'chair', 'dog')
+    """
     global segmentation_model
-    if segmentation_model is None:
-        segmentation_model = SegmentationModel()
+    if segmentation_model is None or segmentation_model.target_class != target_class:
+        segmentation_model = SegmentationModel(target_class)
     return segmentation_model
 
-def segment_frame(frame):
+def segment_frame(frame, target_class='person'):
     """
     Perform segmentation on the input frame using Mask R-CNN
+    Args:
+        frame: Input image frame
+        target_class (str): Class name to segment (e.g., 'person', 'chair', 'dog')
     """
-    model = get_segmentation_model()
+    model = get_segmentation_model(target_class)
     return model.get_segmentation(frame)
 
 # Keep the dummy segmentation as fallback
