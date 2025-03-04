@@ -9,8 +9,7 @@ uniform mat4 modelview;
 out vec2 fragTexCoord;
 
 void main() {
-    vec4 pos = projection * modelview * vec4(position, 1.0);
-    gl_Position = pos;
+    gl_Position = projection * modelview * vec4(position, 1.0);
     fragTexCoord = texCoord;
 }
 """
@@ -22,6 +21,9 @@ uniform sampler2D tex;
 out vec4 outColor;
 
 void main() {
-    outColor = texture(tex, fragTexCoord);
+    vec4 texColor = texture(tex, fragTexCoord);
+    outColor = texColor;
+    // Debug: output pure red if you don't see anything
+    // outColor = vec4(1.0, 0.0, 0.0, 1.0);
 }
 """

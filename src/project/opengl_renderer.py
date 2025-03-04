@@ -97,20 +97,16 @@ def create_lookat_matrix(eye, target, up):
     return rotation @ translation
 
 def set_uniform_matrices(shader_program, width, height):
-    """Set the projection and modelview matrices as uniforms"""
     glUseProgram(shader_program)
     proj_loc = glGetUniformLocation(shader_program, "projection")
     modelview_loc = glGetUniformLocation(shader_program, "modelview")
 
-    # Create perspective projection matrix
     projection_matrix = create_perspective_matrix(45, width/height, 0.1, 100.0)
-    
-    # Create modelview matrix (camera looking at origin from z=2)
     eye = np.array([0, 0, 2.0])
     target = np.array([0, 0, 0])
     up = np.array([0, 1, 0])
     modelview_matrix = create_lookat_matrix(eye, target, up)
 
-    # Set matrices as uniforms
-    glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection_matrix)
-    glUniformMatrix4fv(modelview_loc, 1, GL_FALSE, modelview_matrix)
+    # Pass the transposed matrices to convert from row-major to column-major order
+    glUniformMatrix4fv(proj_loc, 1, GL_TRUE, projection_matrix)
+    glUniformMatrix4fv(modelview_loc, 1, GL_TRUE, modelview_matrix)
