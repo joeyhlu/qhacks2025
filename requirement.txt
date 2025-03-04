@@ -24,4 +24,5 @@ Pillow
 PyOpenGL 
 PyOpenGL_accelerate
 open3d
+pygame
 # pytorch special case, see requirements-pytorch.txt
