@@ -21,8 +21,21 @@ from OpenGL.GL import (
     glUseProgram, glEnableVertexAttribArray, glBindBuffer,
     glVertexAttribPointer, glDrawElements, GL_ARRAY_BUFFER, 
     GL_FLOAT, GL_FALSE, GL_ELEMENT_ARRAY_BUFFER, GL_TRIANGLES, 
-    GL_UNSIGNED_INT, glDisableVertexAttribArray, GL_TEXTURE0, glActiveTexture, glGetUniformLocation, glUniform1i
+    GL_UNSIGNED_INT, glDisableVertexAttribArray, GL_TEXTURE0, glActiveTexture, glGetUniformLocation, glUniform1i, glViewport
 )
+
+def init_display(width, height):
+    """Initialize display for both original and rendered images"""
+    total_width = width * 2  # Double width for side-by-side display
+    pygame.init()
+    # Create a single window with double width
+    display = pygame.display.set_mode((total_width, height), pygame.DOUBLEBUF | pygame.OPENGL)
+    pygame.display.set_caption("3D Object Viewer")
+    
+    # Set up viewport for split screen
+    glViewport(width, 0, width, height)  # OpenGL renders to right half
+    
+    return display
 
 def process_image(image_path, target_class='bottle'):
     """Process a single image"""
@@ -55,7 +68,10 @@ def process_frame_data(frame, target_class):
     # Initialize MiDaS model for depth estimation
     midas, device, transform = load_midas_model()
     
-    # Initialize pygame and OpenGL
+    # Initialize display
+    display = init_display(width, height)
+    
+    # Initialize OpenGL
     init_pygame_opengl(width, height)
     VBO, TBO, EBO = create_buffers()
     texture_id = create_texture(width, height)
@@ -66,7 +82,8 @@ def process_frame_data(frame, target_class):
         'frame_size': (width, height),
         'camera_params': (fx, fy, cx, cy),
         'midas_data': (midas, device, transform),
-        'gl_data': (VBO, TBO, EBO, texture_id, shader_program)
+        'gl_data': (VBO, TBO, EBO, texture_id, shader_program),
+        'screen': display
     }
 
 def main():
@@ -89,15 +106,16 @@ def main():
         clock = pygame.time.Clock()
         
         while running:
-            print("hey")
             for event in pygame.event.get():
                 if event.type == QUIT:
                     running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
             
             frame = cv2.imread(image_path)
             process_frame_gl(frame, data, texture_path)
             
-            pygame.display.flip()
             clock.tick(30)
     
     elif mode == "2":
@@ -133,6 +151,14 @@ def process_frame_gl(frame, data, texture_path):
     fx, fy, cx, cy = data['camera_params']
     midas, device, transform = data['midas_data']
     VBO, TBO, EBO, texture_id, shader_program = data['gl_data']
+    
+    # Draw original frame on left side
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    frame_surface = pygame.surfarray.make_surface(frame_rgb.swapaxes(0, 1))
+    data['screen'].blit(frame_surface, (0, 0))
+    
+    # Set up OpenGL viewport for right side
+    glViewport(width, 0, width, height)
     
     # Load and preprocess texture image
     texture_img = cv2.imread(texture_path, cv2.IMREAD_UNCHANGED)
