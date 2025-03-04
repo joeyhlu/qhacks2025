@@ -6,18 +6,20 @@ from OpenGL.GL import *
 from OpenGL.GL.shaders import compileProgram, compileShader
 import numpy as np
 import cv2
+from math import tan, radians
 
 def init_pygame_opengl(width, height):
+    """Initialize Pygame and OpenGL context"""
     pygame.init()
-    pygame.display.set_mode((width, height), DOUBLEBUF | OPENGL)
-    glViewport(0, 0, width, height)
+    display = pygame.display.set_mode((width, height), pygame.DOUBLEBUF | pygame.OPENGL)
+    pygame.display.set_caption("3D Object Viewer")
+    
+    # Enable necessary OpenGL features
     glEnable(GL_DEPTH_TEST)
-    # Set up projection matrix using gluPerspective
-    glMatrixMode(GL_PROJECTION)
-    glLoadIdentity()
-    from OpenGL.GLU import gluPerspective
-    gluPerspective(45, width / height, 0.1, 100.0)
-    glMatrixMode(GL_MODELVIEW)
+    glEnable(GL_TEXTURE_2D)
+    glClearColor(0.2, 0.2, 0.2, 1.0)  # Dark gray background
+    
+    return display
 
 def create_buffers():
     VBO = glGenBuffers(1)
@@ -58,17 +60,57 @@ def compile_shaders(vertex_shader_code, fragment_shader_code):
     )
     return shader_program
 
+def create_perspective_matrix(fov_y, aspect, near, far):
+    """Create a perspective projection matrix"""
+    f = 1.0 / tan(radians(fov_y) / 2)
+    return np.array([
+        [f/aspect, 0, 0, 0],
+        [0, f, 0, 0],
+        [0, 0, (far+near)/(near-far), (2*far*near)/(near-far)],
+        [0, 0, -1, 0]
+    ], dtype=np.float32)
+
+def create_lookat_matrix(eye, target, up):
+    """Create a look-at view matrix"""
+    forward = np.array(target) - np.array(eye)
+    forward = forward / np.linalg.norm(forward)
+    
+    right = np.cross(forward, up)
+    right = right / np.linalg.norm(right)
+    
+    new_up = np.cross(right, forward)
+    
+    rotation = np.array([
+        [right[0], right[1], right[2], 0],
+        [new_up[0], new_up[1], new_up[2], 0],
+        [-forward[0], -forward[1], -forward[2], 0],
+        [0, 0, 0, 1]
+    ])
+    
+    translation = np.array([
+        [1, 0, 0, -eye[0]],
+        [0, 1, 0, -eye[1]],
+        [0, 0, 1, -eye[2]],
+        [0, 0, 0, 1]
+    ])
+    
+    return rotation @ translation
+
 def set_uniform_matrices(shader_program, width, height):
+    """Set the projection and modelview matrices as uniforms"""
     glUseProgram(shader_program)
     proj_loc = glGetUniformLocation(shader_program, "projection")
     modelview_loc = glGetUniformLocation(shader_program, "modelview")
-    import pygame
-    # Create perspective projection and modelview matrices using pygame's math module
-    projection_matrix = pygame.math.Matrix44.perspective_projection(45, width/height, 0.1, 100.0)
-    modelview_matrix = pygame.math.Matrix44.look_at(
-        pygame.math.Vector3(0, 0, 2.0),  # camera position
-        pygame.math.Vector3(0, 0, 0),    # target
-        pygame.math.Vector3(0, 1, 0)     # up vector
-    )
+
+    # Create perspective projection matrix
+    projection_matrix = create_perspective_matrix(45, width/height, 0.1, 100.0)
+    
+    # Create modelview matrix (camera looking at origin from z=2)
+    eye = np.array([0, 0, 2.0])
+    target = np.array([0, 0, 0])
+    up = np.array([0, 1, 0])
+    modelview_matrix = create_lookat_matrix(eye, target, up)
+
+    # Set matrices as uniforms
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection_matrix)
     glUniformMatrix4fv(modelview_loc, 1, GL_FALSE, modelview_matrix)

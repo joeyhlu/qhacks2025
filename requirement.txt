@@ -25,4 +25,6 @@ PyOpenGL
 PyOpenGL_accelerate
 open3d
 pygame
+timm
+
 # pytorch special case, see requirements-pytorch.txt
