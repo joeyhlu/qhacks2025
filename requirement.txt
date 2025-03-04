@@ -19,6 +19,9 @@ transformers
 accelerate
 safetensors
 numpy
-Pillow
 huggingface
+Pillow
+PyOpenGL 
+PyOpenGL_accelerate
+open3d
 # pytorch special case, see requirements-pytorch.txt
