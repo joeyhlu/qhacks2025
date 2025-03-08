@@ -64,8 +64,18 @@ def run(cls):
 
     segmenter = ObjectSegmentation(plot=False)
 
-    iasd = input("whatcha feeling")
-    design_bgra = get_design_bgra(device="cuda", is_tattoo=True, answer=iasd)
+    # Improve the user input prompt and handle the design generation
+    print("\nPlease describe your design:")
+    design_prompt = input("> ")
+    
+    # Add the missing answer_method parameter
+    design_bgra = get_design_bgra(
+        device="cuda",
+        is_tattoo=True,
+        answer=design_prompt,
+        answer_method="text"  # Add the missing parameter
+    )
+    
     if design_bgra is None:
         print("[ERROR] No design was loaded or generated. Exiting.")
         return
