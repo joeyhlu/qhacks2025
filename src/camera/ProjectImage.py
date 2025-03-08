@@ -40,32 +40,80 @@ class ProjectImage:
         peri = cv2.arcLength(largest_ct, True)
         approx = cv2.approxPolyDP(largest_ct, 0.02 * peri, True)
 
-        if len(approx) != 4:
-            x, y, w, h = cv2.boundingRect(largest_ct)
-            approx = np.array([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], dtype=np.float32)
+        # Determine if the contour is more circular or rectangular
+        circularity = 4 * np.pi * cv2.contourArea(largest_ct) / (peri * peri)
+        is_circular = circularity > 0.8  # Threshold for circularity
+
+        if is_circular:
+            # Handle circular projection
+            (x, y), radius = cv2.minEnclosingCircle(largest_ct)
+            center = (int(x), int(y))
+            radius = int(radius)
+            
+            # Create a circular mask
+            circle_mask = np.zeros_like(mask_region)
+            cv2.circle(circle_mask, center, radius, 255, -1)
+            
+            # Resize design to fit circle
+            size = int(radius * 2)
+            design_resized = cv2.resize(design_bgra, (size, size))
+            
+            # Create output mask
+            mask = np.zeros((frame_bgr.shape[0], frame_bgr.shape[1], 4), dtype=np.uint8)
+            x1, y1 = int(x - radius), int(y - radius)
+            x2, y2 = x1 + size, y1 + size
+            
+            # Ensure coordinates are within frame bounds
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(frame_bgr.shape[1], x2)
+            y2 = min(frame_bgr.shape[0], y2)
+            
+            # Calculate the region to copy from the resized design
+            dx1 = max(0, -int(x - radius))
+            dy1 = max(0, -int(y - radius))
+            dx2 = dx1 + (x2 - x1)
+            dy2 = dy1 + (y2 - y1)
+            
+            # Copy the design to the mask
+            mask[y1:y2, x1:x2] = design_resized[dy1:dy2, dx1:dx2]
+            
+            # Apply the circular mask
+            mask[circle_mask == 0] = 0
+            
         else:
-            approx = approx.reshape(-1, 2).astype(np.float32)
+            # Handle rectangular/polygon projection
+            if len(approx) != 4:
+                # If not exactly 4 corners, use bounding rectangle
+                x, y, w, h = cv2.boundingRect(largest_ct)
+                approx = np.array([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], dtype=np.float32)
+            else:
+                approx = approx.reshape(-1, 2).astype(np.float32)
 
-        h_des, w_des = design_bgra.shape[:2]
-        src_corners = np.array([[0, 0], [w_des, 0], [w_des, h_des], [0, h_des]], dtype=np.float32)
+            # Order corners consistently
+            approx = self.order_corners(approx)
 
-        kp = self.vo.process_frame(frame_bgr, mask_region)
-        if kp is not None and len(self.vo.poses) > 1:
-            pose_transform = self.vo.poses[-1]
-            try:
-                approx = cv2.perspectiveTransform(approx[np.newaxis, :, :], pose_transform[:3]).squeeze()
-            except cv2.error:
-                pass
+            # Get design dimensions
+            h_des, w_des = design_bgra.shape[:2]
+            src_corners = np.array([[0, 0], [w_des, 0], [w_des, h_des], [0, h_des]], dtype=np.float32)
 
-        M = cv2.getPerspectiveTransform(src_corners, approx)
-        warped = cv2.warpPerspective(design_bgra, M, (frame_bgr.shape[1], frame_bgr.shape[0]))
+            # Apply perspective transform if we have pose information
+            kp = self.vo.process_frame(frame_bgr, mask_region)
+            if kp is not None and len(self.vo.poses) > 1:
+                pose_transform = self.vo.poses[-1]
+                try:
+                    approx = cv2.perspectiveTransform(approx[np.newaxis, :, :], pose_transform[:3]).squeeze()
+                except cv2.error:
+                    pass
 
-        mask_f = mask_region.astype(float) / 255.0
-        alpha = (warped[..., 3] / 255.0) * mask_f
-        design_rgb = warped[..., :3]
+            # Compute and apply perspective transform
+            M = cv2.getPerspectiveTransform(src_corners, approx)
+            mask = cv2.warpPerspective(design_bgra, M, (frame_bgr.shape[1], frame_bgr.shape[0]))
 
+        # Blend the warped design with the original frame
+        alpha = (mask[..., 3] / 255.0) * (mask_region / 255.0)
         for c in range(3):
-            out[..., c] = design_rgb[..., c] * alpha + out[..., c] * (1 - alpha)
+            out[..., c] = mask[..., c] * alpha + out[..., c] * (1 - alpha)
 
         return out
 

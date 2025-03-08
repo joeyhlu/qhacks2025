@@ -21,9 +21,9 @@ class ObjectDetection:
         results = self.model(resized_frame)
 
         res = results[0]
-        boxes_xyxy = res.boxes.xyxy.cpu().numpy()  # shape [N,4]
-        confs = res.boxes.conf.cpu().numpy()       # shape [N]
-        classes = res.boxes.cls.cpu().numpy()      # shape [N]
+        boxes_xyxy = res.boxes.xyxy.cpu().numpy()
+        confs = res.boxes.conf.cpu().numpy() 
+        classes = res.boxes.cls.cpu().numpy()
 
         masks = res.masks.data.cpu().numpy() if res.masks is not None else None
 
@@ -48,9 +48,9 @@ class ObjectDetection:
         results = self.model(resized_frame)
 
         res = results[0]
-        boxes_xyxy = res.boxes.xyxy.cpu().numpy()  # shape [N, 4]
-        confs = res.boxes.conf.cpu().numpy()       # shape [N]
-        classes = res.boxes.cls.cpu().numpy()      # shape [N]
+        boxes_xyxy = res.boxes.xyxy.cpu().numpy()
+        confs = res.boxes.conf.cpu().numpy()
+        classes = res.boxes.cls.cpu().numpy()
 
         H, W = frame.shape[:2]
 

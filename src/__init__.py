@@ -105,7 +105,7 @@ def run(cls):
 
         if cls == 'person':
             # Use ObjectSegmentation for person tracking
-            processed_frame, result = segmenter.body_segmentation(frame)
+            _, result = segmenter.body_segmentation(frame)
 
             if result.pose_world_landmarks:
                 current_pose_3d = np.array([
